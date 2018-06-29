@@ -31,7 +31,7 @@ def extractSalesTrx(filename):
     salesCols = ['StoreNum','Register','TransNum','TransDate','TransTime','BusDate','UPC','Item_Id','DeptNum','ItemQuantity',
              'WeightAmt','SalesAmt','CostAmt','CashierNum','PriceType','ServiceType','TenderType','LoyaltyCardNumber']
     salesTrx = pd.read_csv(filename,sep='|',
-                     header=None,
+                     header=None,nrows=500000,
                      names=salesCols,
                      converters={6: str},
                      parse_dates= [3,5])
@@ -118,26 +118,33 @@ if __name__ == '__main__':
     custDF = extractCustomer(PATH,CustFile)
     itemListDF = extractItemList(PATH,ItemListFile)
     storeDF = extractStoreInfo(PATH,StoreFile)
+    salesDF['LoyaltyCardNumber'] = salesDF['LoyaltyCardNumber'].fillna(-999).astype(int)
+
     '''
     salesDF['Description'] = salesDF['Description'].str.strip()
     salesDF.dropna(axis=0, subset=['InvoiceNo'], inplace=True)
     salesDF['InvoiceNo'] = salesDF['InvoiceNo'].astype('str')
     salesDF = salesDF[~salesDF['InvoiceNo'].str.contains('C')]
     '''
-    salesDF['TransNum'] = salesDF['TransNum'].astype('str')
+    iteminsalesDF = pd.merge(salesDF, itemListDF[['LongDes','Item_Id']], left_on='Item_Id', right_on='Item_Id',how = 'left').drop_duplicates(keep='first')
+
+    iteminsalesDF['TransNum'] = iteminsalesDF['TransNum'].astype('str')
     salesDF.dropna(axis=0, subset=['TransNum'], inplace=True)
 
-    basket = (salesDF[salesDF['StoreNum'] ==502].groupby(['TransNum'])['ItemQuantity'].sum().unstack().reset_index().fillna(0).set_index('TransNum'))
+    basket = (iteminsalesDF.groupby(['TransNum','LongDes'])['ItemQuantity'].sum().unstack().reset_index().fillna(0).set_index('TransNum'))
 
     basket_sets = basket.applymap(encode_units)
-    basket_sets.drop('POSTAGE', inplace=True, axis=1)
 
-    frequent_itemsets = apriori(basket_sets, min_support=0.07, use_colnames=True)
+    frequent_itemsets = apriori(basket_sets, min_support=0.001, use_colnames=True)
 
     rules = association_rules(frequent_itemsets, metric="lift", min_threshold=1)
     rules.head()
 
-    rules[ (rules['lift'] >= 6) & (rules['confidence'] >= 0.8)]
+    rules[ (rules['lift'] >= 0.75) & (rules['confidence'] >= 0.4)]
+
+
+    rules[ (rules['lift'] >= 0.75) & (rules['confidence'] >= 0.4)].to_excel('C:/Users/Praveen/Documents/MSDS/ISQS6347-datamining/project/rules.xlsx')
+
 
     '''
     basket[''].sum()
